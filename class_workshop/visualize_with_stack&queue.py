@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 from flask import Flask, request, jsonify
 import time
 import base64
+import json
 import os
 
 import matplotlib

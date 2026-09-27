@@ -2,31 +2,19 @@ import matplotlib.pyplot as plt
 from flask import Flask, request, jsonify
 import time
 import base64
-import json
 import os
 
 import matplotlib
 matplotlib.use("Agg")
-from database import db, Analysis
+
+from stack import Stack
+from queue import Queue
 
 
 app = Flask(__name__)
 
-# Database configuration
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///analysis.db"
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
-db.init_app(app)
-
-with app.app_context():
-    db.create_all()
-
-
-
-
-# -------------------------
 # Algorithms
-# -------------------------
 
 def linear_search(n):
     for i in range(n):
@@ -82,6 +70,7 @@ def insertion_sort(n):
 
         numbers[j + 1] = key
 
+
 def selection_sort(n):
     numbers = list(range(n, 0, -1))
 
@@ -95,11 +84,68 @@ def selection_sort(n):
         numbers[i], numbers[min_index] = (
             numbers[min_index],
             numbers[i]
-        )    
+        )
 
-# -------------------------
+
+# Stack algorithms
+
+def stack_push(n):
+    stack = Stack()
+
+    for i in range(n):
+        stack.push(i)
+
+
+def stack_pop(n):
+    stack = Stack()
+
+    for i in range(n):
+        stack.push(i)
+
+    for i in range(n):
+        stack.pop()
+
+
+def stack_peek(n):
+    stack = Stack()
+
+    for i in range(n):
+        stack.push(i)
+
+    for i in range(n):
+        stack.peek()
+
+
+# Queue algorithms
+
+def queue_enqueue(n):
+    queue = Queue()
+
+    for i in range(n):
+        queue.enqueue(i)
+
+
+def queue_dequeue(n):
+    queue = Queue()
+
+    for i in range(n):
+        queue.enqueue(i)
+
+    for i in range(n):
+        queue.dequeue()
+
+
+def queue_peek(n):
+    queue = Queue()
+
+    for i in range(n):
+        queue.enqueue(i)
+
+    for i in range(n):
+        queue.peek()
+
+
 # Algorithm dictionary
-# -------------------------
 
 algorithms = {
     "linear_search": linear_search,
@@ -107,13 +153,17 @@ algorithms = {
     "binary_search": binary_search,
     "nested_loops": nested_loops,
     "insertion_sort": insertion_sort,
-    "selection_sort": selection_sort
+    "selection_sort": selection_sort,
+    "stack_push": stack_push,
+    "stack_pop": stack_pop,
+    "stack_peek": stack_peek,
+    "queue_enqueue": queue_enqueue,
+    "queue_dequeue": queue_dequeue,
+    "queue_peek": queue_peek
 }
 
 
-# -------------------------
 # Visualizer
-# -------------------------
 
 def time_complexity_visualizer(algorithm, n_min, n_max, n_step):
 
@@ -135,9 +185,7 @@ def time_complexity_visualizer(algorithm, n_min, n_max, n_step):
 
         times.append(elapsed_time)
 
-    # -------------------------
     # Create graph
-    # -------------------------
 
     plt.figure()
 
@@ -149,9 +197,7 @@ def time_complexity_visualizer(algorithm, n_min, n_max, n_step):
 
     plt.grid(True)
 
-    # -------------------------
     # Save graph
-    # -------------------------
 
     os.makedirs("snapshots", exist_ok=True)
 
@@ -161,9 +207,7 @@ def time_complexity_visualizer(algorithm, n_min, n_max, n_step):
 
     plt.close()
 
-    # -------------------------
     # Convert image to Base64
-    # -------------------------
 
     with open(image_path, "rb") as image_file:
 
@@ -179,21 +223,19 @@ def time_complexity_visualizer(algorithm, n_min, n_max, n_step):
     }
 
 
-# -------------------------
 # Flask endpoint
-# -------------------------
 
 @app.route("/analyze", methods=["GET"])
 def analyze():
 
     # Get query parameters
+
     algo = request.args.get("algo")
     step = request.args.get("step")
     n_max = request.args.get("n_max")
 
-    # -------------------------
+
     # Check parameters
-    # -------------------------
 
     if algo is None or step is None or n_max is None:
 
@@ -206,9 +248,8 @@ def analyze():
 
     algo = algo.strip("'\"")
 
-    # -------------------------
+
     # Convert numbers
-    # -------------------------
 
     try:
 
@@ -221,9 +262,8 @@ def analyze():
             "error": "step and n_max must be integers"
         }), 400
 
-    # -------------------------
+
     # Validate step
-    # -------------------------
 
     if step <= 0:
 
@@ -231,9 +271,8 @@ def analyze():
             "error": "step must be greater than 0"
         }), 400
 
-    # -------------------------
+
     # Validate n_max
-    # -------------------------
 
     if n_max < 0:
 
@@ -241,9 +280,8 @@ def analyze():
             "error": "n_max must be greater than or equal to 0"
         }), 400
 
-    # -------------------------
+
     # Validate algorithm
-    # -------------------------
 
     if algo not in algorithms:
 
@@ -255,11 +293,11 @@ def analyze():
         }), 400
 
     # Minimum input size
+
     n_min = 0
 
-    # -------------------------
+
     # Run algorithm visualizer
-    # -------------------------
 
     result = time_complexity_visualizer(
         algorithms[algo],
@@ -268,9 +306,8 @@ def analyze():
         step
     )
 
-    # -------------------------
+
     # Return JSON response
-    # -------------------------
 
     return jsonify({
 
@@ -293,60 +330,7 @@ def analyze():
     })
 
 
-
-# Save analysis endpoint
-
-@app.route("/save_analysis", methods=["POST"])
-def save_analysis():
-
-    data = request.get_json()
-
-    if data is None:
-
-        return jsonify({
-            "error": "Please provide JSON data"
-        }), 400
-
-    required_fields = [
-        "algorithm",
-        "n_min",
-        "n_max",
-        "step",
-        "input_sizes",
-        "times",
-        "image_path"
-    ]
-
-    for field in required_fields:
-
-        if field not in data:
-
-            return jsonify({
-                "error": f"Missing field: {field}"
-            }), 400
-
-    analysis = Analysis(
-        algorithm=data["algorithm"],
-        n_min=data["n_min"],
-        n_max=data["n_max"],
-        step=data["step"],
-        input_sizes=json.dumps(data["input_sizes"]),
-        times=json.dumps(data["times"]),
-        image_path=data["image_path"]
-    )
-
-    db.session.add(analysis)
-    db.session.commit()
-
-    return jsonify({
-        "message": "Analysis saved successfully",
-        "analysis_id": analysis.id
-    }), 201
-
-
-# -------------------------
 # Start Flask server
-# -------------------------
 
 if __name__ == "__main__":
 
