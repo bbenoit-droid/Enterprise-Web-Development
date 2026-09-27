@@ -7,8 +7,21 @@ import matplotlib
 matplotlib.use('Agg') # interactive backend
 import matplotlib.pyplot as plt
 from flask import Flask, jsonify, request
+from database import db, Analysis
 
 app = Flask(__name__)
+
+
+# Database configuration
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///analysis.db"
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
+db.init_app(app)
+
+with app.app_context():
+    db.create_all()
+
+
 
 # Creating the directory where image snapshots will be saved locally
 SNAPSHOT_DIR = 'static/snapshots'
@@ -147,5 +160,58 @@ def analyze():
         'time_complexity': COMPLEXITIES.get(algo_name, 'O(n)'),
         'total_time_ms': total_time_ms
     })
+
+
+
+# Save analysis endpoint
+
+@app.route("/save_analysis", methods=["POST"])
+def save_analysis():
+
+    data = request.get_json()
+
+    if data is None:
+
+        return jsonify({
+            "error": "Please provide JSON data"
+        }), 400
+
+    required_fields = [
+        "algorithm",
+        "n_min",
+        "n_max",
+        "step",
+        "input_sizes",
+        "times",
+        "image_path"
+    ]
+
+    for field in required_fields:
+
+        if field not in data:
+
+            return jsonify({
+                "error": f"Missing field: {field}"
+            }), 400
+
+    analysis = Analysis(
+        algorithm=data["algorithm"],
+        n_min=data["n_min"],
+        n_max=data["n_max"],
+        step=data["step"],
+        input_sizes=json.dumps(data["input_sizes"]),
+        times=json.dumps(data["times"]),
+        image_path=data["image_path"]
+    )
+
+    db.session.add(analysis)
+    db.session.commit()
+
+    return jsonify({
+        "message": "Analysis saved successfully",
+        "analysis_id": analysis.id
+    }), 201
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8000, debug=True)
+

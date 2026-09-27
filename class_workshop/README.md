@@ -51,11 +51,13 @@ parameters.
 - `flask`
 - `matplotlib`
 - `numpy`
+- `Flask-SQLAlchemy`
 
 Install with:
 
 ```powershell
 pip install flask matplotlib numpy
+python -m pip install Flask-SQLAlchemy
 ```
 
 ## Running the server
