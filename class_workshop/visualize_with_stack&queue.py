@@ -4,9 +4,12 @@ import time
 import base64
 import json
 import os
+from datetime import timedelta
 
 import matplotlib
 matplotlib.use("Agg")
+
+from flask_jwt_extended import JWTManager, create_access_token, jwt_required
 
 from stack import Stack
 from queue import Queue
@@ -19,10 +22,98 @@ app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///analysis.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
+# JWT configuration - tokens are only ever read from the Authorization header
+app.config["JWT_SECRET_KEY"] = os.environ.get(
+    "JWT_SECRET_KEY", "batsindaqwertyKeynes123456Benoit"
+)
+app.config["JWT_TOKEN_LOCATION"] = ["headers"]
+app.config["JWT_HEADER_TYPE"] = "Bearer"
+app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=1)
+
 db.init_app(app)
 
 with app.app_context():
     db.create_all()
+
+jwt = JWTManager(app)
+
+# Accounts accepted by POST /login (override with env vars if you want)
+USERS = {
+    os.environ.get("JWT_USERNAME", "admin"): os.environ.get(
+        "JWT_PASSWORD", "admin123"
+    )
+}
+
+# Every rejection below answers 401 with the same message
+
+@jwt.unauthorized_loader
+def _reject_missing_token(*args):
+    return jsonify({"error": "I don't know you"}), 401
+
+
+@jwt.invalid_token_loader
+def _reject_invalid_token(*args):
+    return jsonify({"error": "I don't know you"}), 401
+
+
+@jwt.expired_token_loader
+def _reject_expired_token(*args):
+    return jsonify({"error": "I don't know you"}), 401
+
+
+@jwt.revoked_token_loader
+def _reject_revoked_token(*args):
+    return jsonify({"error": "I don't know you"}), 401
+
+
+@jwt.needs_fresh_token_loader
+def _reject_stale_token(*args):
+    return jsonify({"error": "I don't know you"}), 401
+
+
+@jwt.token_verification_failed_loader
+def _reject_unverified_token(*args):
+    return jsonify({"error": "I don't know you"}), 401
+
+
+@jwt.user_lookup_error_loader
+def _reject_unknown_user(*args):
+    return jsonify({"error": "I don't know you"}), 401
+
+
+# Issues a JWT, returned in the Authorization response header as "Bearer <token>"
+
+@app.route("/login", methods=["POST"])
+def login():
+
+    data = request.get_json(silent=True)
+
+    if not isinstance(data, dict):
+        data = {}
+
+    username = data.get("username")
+    password = data.get("password")
+
+    if (
+        not isinstance(username, str)
+        or not isinstance(password, str)
+        or username not in USERS
+        or USERS[username] != password
+    ):
+
+        return jsonify({"error": "I don't know you"}), 401
+
+    token = create_access_token(identity=username)
+
+    response = jsonify({
+        "username": username,
+        "token_type": "Bearer",
+        "access_token": token
+    })
+
+    response.headers["Authorization"] = f"Bearer {token}"
+
+    return response, 200
 
 
 # Algorithms
@@ -344,11 +435,12 @@ def analyze():
 # Save analysis endpoint
 
 @app.route("/save_analysis", methods=["POST"])
+@jwt_required()
 def save_analysis():
 
-    data = request.get_json()
+    data = request.get_json(silent=True)
 
-    if data is None:
+    if not isinstance(data, dict):
 
         return jsonify({
             "error": "Please provide JSON data"

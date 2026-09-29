@@ -20,6 +20,7 @@ matches what you want to demo:
 - [Requirements](#requirements)
 - [Running the server](#running-the-server)
 - [API reference](#api-reference)
+  - [`POST /login`](#post-login)
   - [`GET /analyze`](#get-analyze)
   - [`POST /save_analysis`](#post-save_analysis)
 - [Supported algorithms](#supported-algorithms)
@@ -68,6 +69,7 @@ For a request like `algo=linear_search&step=100&n_max=10000`, the server:
 - Python 3.10+
 - `flask`, `matplotlib`, `numpy`
 - `Flask-SQLAlchemy` (for `app.py`, `visualize.py`, `visualize_with_stack&queue.py`)
+- `Flask-JWT-Extended` + `PyJWT` (JWT auth for `POST /save_analysis`)
 
 Install with:
 
@@ -76,6 +78,9 @@ source ../.venv/bin/activate
 pip install -r essential_req.txt
 pip install Flask-SQLAlchemy
 ```
+
+> `essential_req.txt` now also pins `Flask-JWT-Extended` and `PyJWT`, which
+> `/save_analysis` authentication depends on.
 
 > Always activate the project venv first (`source ../.venv/bin/activate` from
 > this folder). Plain `python` is not on PATH on a fresh shell, and the system
@@ -108,6 +113,30 @@ GET http://localhost:8000/analyze?algo=linear_search&step=100&n_max=10000
 The endpoints below are shared by `app.py`, `visualize.py`, and
 `visualize_with_stack&queue.py`. Response fields differ slightly per variant —
 differences are called out inline.
+
+### `POST /login`
+
+Exchanges a username/password for a JWT that `POST /save_analysis` requires.
+Tokens are read **only** from the `Authorization` header
+(`JWT_TOKEN_LOCATION = ["headers"]`, `JWT_HEADER_TYPE = "Bearer"`) — a token
+passed as a query parameter is rejected with `401`.
+
+**Body**
+
+| Field | Type | Notes |
+|---|---|---|
+| `username`, `password` | string | Defaults to `admin` / `admin123`; override with the `JWT_USERNAME` / `JWT_PASSWORD` env vars. |
+
+**Responses**
+
+- `200` — body `{"username": "admin", "token_type": "Bearer", "access_token": "..."}` **and** an `Authorization: Bearer <token>` response header
+- `401` — `{"error": "I don't know you"}`
+
+```bash
+curl -i -X POST http://localhost:8000/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username": "admin", "password": "admin123"}'
+```
 
 ### `GET /analyze`
 
@@ -176,6 +205,20 @@ in an `<img>` tag or Markdown. `app.py` already returns it with that prefix as
 
 Persists one analysis to SQLite (table `analysis`). Accepts a JSON body.
 
+**Authentication (JWT required)**
+
+Send the token obtained from [`POST /login`](#post-login) in the request
+headers:
+
+```
+Authorization: Bearer <access_token>
+```
+
+Anything else — missing header, malformed/invalid/expired token, or a token
+supplied as a query parameter — is rejected before the body is even read:
+
+- `401` — `{"error": "I don't know you"}`
+
 **Required fields**
 
 | Field | Type |
@@ -189,6 +232,7 @@ Persists one analysis to SQLite (table `analysis`). Accepts a JSON body.
 
 - `201` — `{"message": "Analysis saved successfully", "analysis_id": 1}`
 - `400` — `{"error": "Please provide JSON data"}` or `{"error": "Missing field: <name>"}`
+- `401` — `{"error": "I don't know you"}`
 
 ## Supported algorithms
 
